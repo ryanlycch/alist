@@ -19,11 +19,15 @@ import (
 )
 
 func InitDB() {
+	logLevel := logger.Silent
+	if flags.Debug || flags.Dev {
+		logLevel = logger.Info
+	}
 	newLogger := logger.New(
 		stdlog.New(log.StandardLogger().Out, "\r\n", stdlog.LstdFlags),
 		logger.Config{
 			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Silent,
+			LogLevel:                  logLevel,
 			IgnoreRecordNotFoundError: true,
 			Colorful:                  true,
 		},
@@ -38,6 +42,7 @@ func InitDB() {
 	var err error
 	if flags.Dev {
 		dB, err = gorm.Open(sqlite.Open("file::memory:?cache=shared"), gormConfig)
+		conf.Conf.Database.Type = "sqlite3"
 	} else {
 		database := conf.Conf.Database
 		switch database.Type {
@@ -46,18 +51,26 @@ func InitDB() {
 				if !(strings.HasSuffix(database.DBFile, ".db") && len(database.DBFile) > 3) {
 					log.Fatalf("db name error.")
 				}
-				dB, err = gorm.Open(sqlite.Open(database.DBFile), gormConfig)
+				dB, err = gorm.Open(sqlite.Open(fmt.Sprintf("%s?_journal=WAL&_vacuum=incremental",
+					database.DBFile)), gormConfig)
 			}
 		case "mysql":
 			{
-				dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&tls=%s",
-					database.User, database.Password, database.Host, database.Port, database.Name, database.SSLMode)
+				dsn := database.DSN
+				if dsn == "" {
+					//[username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+					dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&tls=%s",
+						database.User, database.Password, database.Host, database.Port, database.Name, database.SSLMode)
+				}
 				dB, err = gorm.Open(mysql.Open(dsn), gormConfig)
 			}
 		case "postgres":
 			{
-				dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=Asia/Shanghai",
-					database.Host, database.User, database.Password, database.Name, database.Port, database.SSLMode)
+				dsn := database.DSN
+				if dsn == "" {
+					dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=Asia/Shanghai",
+						database.Host, database.User, database.Password, database.Name, database.Port, database.SSLMode)
+				}
 				dB, err = gorm.Open(postgres.Open(dsn), gormConfig)
 			}
 		default:

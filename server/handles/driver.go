@@ -3,23 +3,23 @@ package handles
 import (
 	"fmt"
 
-	"github.com/alist-org/alist/v3/internal/operations"
+	"github.com/alist-org/alist/v3/internal/op"
 	"github.com/alist-org/alist/v3/server/common"
 	"github.com/gin-gonic/gin"
 )
 
-func ListDriverItems(c *gin.Context) {
-	common.SuccessResp(c, operations.GetDriverItemsMap())
+func ListDriverInfo(c *gin.Context) {
+	common.SuccessResp(c, op.GetDriverInfoMap())
 }
 
 func ListDriverNames(c *gin.Context) {
-	common.SuccessResp(c, operations.GetDriverNames())
+	common.SuccessResp(c, op.GetDriverNames())
 }
 
-func GetDriverItems(c *gin.Context) {
+func GetDriverInfo(c *gin.Context) {
 	driverName := c.Query("driver")
-	itemsMap := operations.GetDriverItemsMap()
-	items, ok := itemsMap[driverName]
+	infoMap := op.GetDriverInfoMap()
+	items, ok := infoMap[driverName]
 	if !ok {
 		common.ErrorStrResp(c, fmt.Sprintf("driver [%s] not found", driverName), 404)
 		return

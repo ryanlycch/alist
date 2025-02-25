@@ -1,7 +1,7 @@
 .idea/
 .DS_Store
 output/
-dist/
+/dist/
 
 # Binaries for programs and plugins
 *.exe
@@ -20,12 +20,15 @@ dist/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
-bin/*
-/alist
-/alist.exe
+/bin/*
 *.json
-public/*.html
-public/assets/
-public/public/
-/data
-log/
+/build
+/data/
+/tmp/
+/log/
+/lang/
+/daemon/
+/public/dist/*
+/!public/dist/README.md
+
+.VSCodeCounter

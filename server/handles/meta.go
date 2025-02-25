@@ -2,27 +2,26 @@ package handles
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/alist-org/alist/v3/internal/db"
 	"github.com/alist-org/alist/v3/internal/model"
-	"github.com/alist-org/alist/v3/pkg/utils"
+	"github.com/alist-org/alist/v3/internal/op"
 	"github.com/alist-org/alist/v3/server/common"
+	"github.com/dlclark/regexp2"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
 func ListMetas(c *gin.Context) {
-	var req common.PageReq
+	var req model.PageReq
 	if err := c.ShouldBind(&req); err != nil {
 		common.ErrorResp(c, err, 400)
 		return
 	}
 	req.Validate()
 	log.Debugf("%+v", req)
-	metas, total, err := db.GetMetas(req.PageIndex, req.PageSize)
+	metas, total, err := op.GetMetas(req.Page, req.PerPage)
 	if err != nil {
 		common.ErrorResp(c, err, 500, true)
 		return
@@ -44,8 +43,7 @@ func CreateMeta(c *gin.Context) {
 		common.ErrorStrResp(c, fmt.Sprintf("%s is illegal: %s", r, err.Error()), 400)
 		return
 	}
-	req.Path = utils.StandardizePath(req.Path)
-	if err := db.CreateMeta(&req); err != nil {
+	if err := op.CreateMeta(&req); err != nil {
 		common.ErrorResp(c, err, 500, true)
 	} else {
 		common.SuccessResp(c)
@@ -63,8 +61,7 @@ func UpdateMeta(c *gin.Context) {
 		common.ErrorStrResp(c, fmt.Sprintf("%s is illegal: %s", r, err.Error()), 400)
 		return
 	}
-	req.Path = utils.StandardizePath(req.Path)
-	if err := db.UpdateMeta(&req); err != nil {
+	if err := op.UpdateMeta(&req); err != nil {
 		common.ErrorResp(c, err, 500, true)
 	} else {
 		common.SuccessResp(c)
@@ -74,7 +71,7 @@ func UpdateMeta(c *gin.Context) {
 func validHide(hide string) (string, error) {
 	rs := strings.Split(hide, "\n")
 	for _, r := range rs {
-		_, err := regexp.Compile(r)
+		_, err := regexp2.Compile(r, regexp2.None)
 		if err != nil {
 			return r, err
 		}
@@ -89,7 +86,7 @@ func DeleteMeta(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	if err := db.DeleteMetaById(uint(id)); err != nil {
+	if err := op.DeleteMetaById(uint(id)); err != nil {
 		common.ErrorResp(c, err, 500, true)
 		return
 	}
@@ -103,7 +100,7 @@ func GetMeta(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	meta, err := db.GetMetaById(uint(id))
+	meta, err := op.GetMetaById(uint(id))
 	if err != nil {
 		common.ErrorResp(c, err, 500, true)
 		return

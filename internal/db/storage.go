@@ -1,13 +1,15 @@
 package db
 
 import (
+	"fmt"
+
 	"github.com/alist-org/alist/v3/internal/model"
 	"github.com/pkg/errors"
 )
 
 // why don't need `cache` for storage?
-// because all storage store in `operations.storagesMap`
-// the most of the read operation is from `operations.storagesMap`
+// because all storage store in `op.storagesMap`
+// the most of the read operation is from `op.storagesMap`
 // just for persistence in database
 
 // CreateStorage just insert storage to database
@@ -33,7 +35,7 @@ func GetStorages(pageIndex, pageSize int) ([]model.Storage, int64, error) {
 		return nil, 0, errors.Wrapf(err, "failed get storages count")
 	}
 	var storages []model.Storage
-	if err := storageDB.Order(columnName("index")).Offset((pageIndex - 1) * pageSize).Limit(pageSize).Find(&storages).Error; err != nil {
+	if err := addStorageOrder(storageDB).Order(columnName("order")).Offset((pageIndex - 1) * pageSize).Limit(pageSize).Find(&storages).Error; err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
 	return storages, count, nil
@@ -47,4 +49,22 @@ func GetStorageById(id uint) (*model.Storage, error) {
 		return nil, errors.WithStack(err)
 	}
 	return &storage, nil
+}
+
+// GetStorageByMountPath Get Storage by mountPath, used to update storage usually
+func GetStorageByMountPath(mountPath string) (*model.Storage, error) {
+	var storage model.Storage
+	if err := db.Where("mount_path = ?", mountPath).First(&storage).Error; err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return &storage, nil
+}
+
+func GetEnabledStorages() ([]model.Storage, error) {
+	var storages []model.Storage
+	err := addStorageOrder(db).Where(fmt.Sprintf("%s = ?", columnName("disabled")), false).Find(&storages).Error
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return storages, nil
 }

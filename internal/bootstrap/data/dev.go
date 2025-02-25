@@ -7,17 +7,17 @@ import (
 	"github.com/alist-org/alist/v3/internal/db"
 	"github.com/alist-org/alist/v3/internal/message"
 	"github.com/alist-org/alist/v3/internal/model"
-	"github.com/alist-org/alist/v3/internal/operations"
+	"github.com/alist-org/alist/v3/internal/op"
 	log "github.com/sirupsen/logrus"
 )
 
 func initDevData() {
-	err := operations.CreateStorage(context.Background(), model.Storage{
+	_, err := op.CreateStorage(context.Background(), model.Storage{
 		MountPath: "/",
-		Index:     0,
+		Order:     0,
 		Driver:    "Local",
 		Status:    "",
-		Addition:  `{"root_folder":"."}`,
+		Addition:  `{"root_folder_path":"."}`,
 	})
 	if err != nil {
 		log.Fatalf("failed to create storage: %+v", err)
@@ -37,9 +37,9 @@ func initDevData() {
 func initDevDo() {
 	if flags.Dev {
 		go func() {
-			err := message.GetMessenger().WaitSend(map[string]string{
-				"type": "dev",
-				"msg":  "dev mode",
+			err := message.GetMessenger().WaitSend(message.Message{
+				Type:    "string",
+				Content: "dev mode",
 			}, 10)
 			if err != nil {
 				log.Debugf("%+v", err)

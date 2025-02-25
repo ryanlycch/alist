@@ -1,61 +1,36 @@
 package db
 
 import (
-	"time"
+	"encoding/base64"
 
-	"github.com/Xhofe/go-cache"
-	"github.com/alist-org/alist/v3/internal/errs"
 	"github.com/alist-org/alist/v3/internal/model"
-	"github.com/alist-org/alist/v3/pkg/singleflight"
+	"github.com/alist-org/alist/v3/pkg/utils"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pkg/errors"
 )
 
-var userCache = cache.NewMemCache(cache.WithShards[*model.User](2))
-var userG singleflight.Group[*model.User]
-var guest *model.User
-var admin *model.User
-
-func GetAdmin() (*model.User, error) {
-	if admin != nil {
-		return admin, nil
-	}
-	user := model.User{Role: model.ADMIN}
+func GetUserByRole(role int) (*model.User, error) {
+	user := model.User{Role: role}
 	if err := db.Where(user).Take(&user).Error; err != nil {
 		return nil, err
 	}
-	admin = &user
-	return &user, nil
-}
-
-func GetGuest() (*model.User, error) {
-	if guest != nil {
-		return guest, nil
-	}
-	user := model.User{Role: model.GUEST}
-	if err := db.Where(user).Take(&user).Error; err != nil {
-		return nil, err
-	}
-	guest = &user
 	return &user, nil
 }
 
 func GetUserByName(username string) (*model.User, error) {
-	if username == "" {
-		return nil, errors.WithStack(errs.EmptyUsername)
+	user := model.User{Username: username}
+	if err := db.Where(user).First(&user).Error; err != nil {
+		return nil, errors.Wrapf(err, "failed find user")
 	}
-	user, ok := userCache.Get(username)
-	if ok {
-		return user, nil
+	return &user, nil
+}
+
+func GetUserBySSOID(ssoID string) (*model.User, error) {
+	user := model.User{SsoID: ssoID}
+	if err := db.Where(user).First(&user).Error; err != nil {
+		return nil, errors.Wrapf(err, "The single sign on platform is not bound to any users")
 	}
-	user, err, _ := userG.Do(username, func() (*model.User, error) {
-		user := model.User{Username: username}
-		if err := db.Where(user).First(&user).Error; err != nil {
-			return nil, errors.Wrapf(err, "failed find user")
-		}
-		userCache.Set(username, &user, cache.WithEx[*model.User](time.Hour))
-		return &user, nil
-	})
-	return user, err
+	return &user, nil
 }
 
 func GetUserById(id uint) (*model.User, error) {
@@ -71,54 +46,57 @@ func CreateUser(u *model.User) error {
 }
 
 func UpdateUser(u *model.User) error {
-	old, err := GetUserById(u.ID)
-	if err != nil {
-		return err
-	}
-	userCache.Del(old.Username)
-	if u.IsGuest() {
-		guest = nil
-	}
-	if u.IsAdmin() {
-		admin = nil
-	}
 	return errors.WithStack(db.Save(u).Error)
 }
 
-func Cancel2FAByUser(u *model.User) error {
-	u.OtpSecret = ""
-	return errors.WithStack(UpdateUser(u))
-}
-
-func Cancel2FAById(id uint) error {
-	user, err := GetUserById(id)
-	if err != nil {
-		return err
-	}
-	return Cancel2FAByUser(user)
-}
-
-func GetUsers(pageIndex, pageSize int) ([]model.User, int64, error) {
+func GetUsers(pageIndex, pageSize int) (users []model.User, count int64, err error) {
 	userDB := db.Model(&model.User{})
-	var count int64
 	if err := userDB.Count(&count).Error; err != nil {
 		return nil, 0, errors.Wrapf(err, "failed get users count")
 	}
-	var users []model.User
-	if err := userDB.Offset((pageIndex - 1) * pageSize).Limit(pageSize).Find(&users).Error; err != nil {
+	if err := userDB.Order(columnName("id")).Offset((pageIndex - 1) * pageSize).Limit(pageSize).Find(&users).Error; err != nil {
 		return nil, 0, errors.Wrapf(err, "failed get find users")
 	}
 	return users, count, nil
 }
 
 func DeleteUserById(id uint) error {
-	old, err := GetUserById(id)
+	return errors.WithStack(db.Delete(&model.User{}, id).Error)
+}
+
+func UpdateAuthn(userID uint, authn string) error {
+	return db.Model(&model.User{ID: userID}).Update("authn", authn).Error
+}
+
+func RegisterAuthn(u *model.User, credential *webauthn.Credential) error {
+	if u == nil {
+		return errors.New("user is nil")
+	}
+	exists := u.WebAuthnCredentials()
+	if credential != nil {
+		exists = append(exists, *credential)
+	}
+	res, err := utils.Json.Marshal(exists)
 	if err != nil {
 		return err
 	}
-	if old.IsAdmin() || old.IsGuest() {
-		return errors.WithStack(errs.DeleteAdminOrGuest)
+	return UpdateAuthn(u.ID, string(res))
+}
+
+func RemoveAuthn(u *model.User, id string) error {
+	exists := u.WebAuthnCredentials()
+	for i := 0; i < len(exists); i++ {
+		idEncoded := base64.StdEncoding.EncodeToString(exists[i].ID)
+		if idEncoded == id {
+			exists[len(exists)-1], exists[i] = exists[i], exists[len(exists)-1]
+			exists = exists[:len(exists)-1]
+			break
+		}
 	}
-	userCache.Del(old.Username)
-	return errors.WithStack(db.Delete(&model.User{}, id).Error)
+
+	res, err := utils.Json.Marshal(exists)
+	if err != nil {
+		return err
+	}
+	return UpdateAuthn(u.ID, string(res))
 }

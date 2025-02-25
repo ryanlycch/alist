@@ -1,8 +1,10 @@
 package flags
 
 var (
-	Config   string // config file
-	Debug    bool
-	NoPrefix bool
-	Dev      bool
+	DataDir     string
+	Debug       bool
+	NoPrefix    bool
+	Dev         bool
+	ForceBinDir bool
+	LogStd      bool
 )

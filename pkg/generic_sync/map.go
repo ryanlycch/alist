@@ -125,6 +125,11 @@ func (m *MapOf[K, V]) Load(key K) (value V, ok bool) {
 	return e.load()
 }
 
+func (m *MapOf[K, V]) Has(key K) bool {
+	_, ok := m.Load(key)
+	return ok
+}
+
 func (e *entry[V]) load() (value V, ok bool) {
 	p := atomic.LoadPointer(&e.p)
 	if p == nil || p == expunged {
@@ -345,6 +350,23 @@ func (m *MapOf[K, V]) Values() []V {
 		return true
 	})
 	return values
+}
+
+func (m *MapOf[K, V]) Count() int {
+	return len(m.dirty)
+}
+
+func (m *MapOf[K, V]) Empty() bool {
+	return m.Count() == 0
+}
+
+func (m *MapOf[K, V]) ToMap() map[K]V {
+	ans := make(map[K]V)
+	m.Range(func(key K, value V) bool {
+		ans[key] = value
+		return true
+	})
+	return ans
 }
 
 func (m *MapOf[K, V]) Clear() {

@@ -3,21 +3,28 @@ package common
 import (
 	"fmt"
 	"net/http"
+	stdpath "path"
 	"strings"
 
 	"github.com/alist-org/alist/v3/internal/conf"
-	"github.com/alist-org/alist/v3/internal/setting"
 )
 
-func GetBaseUrl(r *http.Request) string {
-	baseUrl := setting.GetByKey(conf.ApiUrl)
-	protocol := "http"
-	if r.TLS != nil {
-		protocol = "https"
+func GetApiUrl(r *http.Request) string {
+	api := conf.Conf.SiteURL
+	if strings.HasPrefix(api, "http") {
+		return strings.TrimSuffix(api, "/")
 	}
-	if baseUrl == "" {
-		baseUrl = fmt.Sprintf("%s//%s", protocol, r.Host)
+	if r != nil {
+		protocol := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			protocol = "https"
+		}
+		host := r.Header.Get("X-Forwarded-Host")
+		if host == "" {
+			host = r.Host
+		}
+		api = fmt.Sprintf("%s://%s", protocol, stdpath.Join(host, api))
 	}
-	strings.TrimSuffix(baseUrl, "/")
-	return baseUrl
+	api = strings.TrimSuffix(api, "/")
+	return api
 }

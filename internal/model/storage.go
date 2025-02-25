@@ -1,17 +1,22 @@
 package model
 
-import "time"
+import (
+	"time"
+)
 
 type Storage struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`                        // unique key
 	MountPath       string    `json:"mount_path" gorm:"unique" binding:"required"` // must be standardized
-	Index           int       `json:"index"`                                       // use to sort
+	Order           int       `json:"order"`                                       // use to sort
 	Driver          string    `json:"driver"`                                      // driver used
 	CacheExpiration int       `json:"cache_expiration"`                            // cache expire time
 	Status          string    `json:"status"`
 	Addition        string    `json:"addition" gorm:"type:text"` // Additional information, defined in the corresponding driver
 	Remark          string    `json:"remark"`
 	Modified        time.Time `json:"modified"`
+	Disabled        bool      `json:"disabled"` // if disabled
+	DisableIndex    bool      `json:"disable_index"`
+	EnableSign      bool      `json:"enable_sign"`
 	Sort
 	Proxy
 }
@@ -25,15 +30,20 @@ type Sort struct {
 type Proxy struct {
 	WebProxy     bool   `json:"web_proxy"`
 	WebdavPolicy string `json:"webdav_policy"`
+	ProxyRange   bool   `json:"proxy_range"`
 	DownProxyUrl string `json:"down_proxy_url"`
 }
 
-func (a *Storage) GetStorage() Storage {
-	return *a
+func (s *Storage) GetStorage() *Storage {
+	return s
 }
 
-func (a *Storage) SetStatus(status string) {
-	a.Status = status
+func (s *Storage) SetStorage(storage Storage) {
+	*s = storage
+}
+
+func (s *Storage) SetStatus(status string) {
+	s.Status = status
 }
 
 func (p Proxy) Webdav302() bool {

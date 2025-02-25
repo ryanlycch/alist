@@ -1,35 +1,38 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
-	"github.com/alist-org/alist/v3/internal/db"
-	log "github.com/sirupsen/logrus"
+	"github.com/alist-org/alist/v3/internal/op"
+	"github.com/alist-org/alist/v3/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
-// cancel2FACmd represents the delete2fa command
-var cancel2FACmd = &cobra.Command{
+// Cancel2FACmd represents the delete2fa command
+var Cancel2FACmd = &cobra.Command{
 	Use:   "cancel2fa",
 	Short: "Delete 2FA of admin user",
 	Run: func(cmd *cobra.Command, args []string) {
 		Init()
-		admin, err := db.GetAdmin()
+		defer Release()
+		admin, err := op.GetAdmin()
 		if err != nil {
-			log.Errorf("failed to get admin user: %+v", err)
+			utils.Log.Errorf("failed to get admin user: %+v", err)
 		} else {
-			err := db.Cancel2FAByUser(admin)
+			err := op.Cancel2FAByUser(admin)
 			if err != nil {
-				log.Errorf("failed to cancel 2FA: %+v", err)
+				utils.Log.Errorf("failed to cancel 2FA: %+v", err)
+			} else {
+				utils.Log.Info("2FA canceled")
+				DelAdminCacheOnline()
 			}
 		}
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(cancel2FACmd)
+	RootCmd.AddCommand(Cancel2FACmd)
 
 	// Here you will define your flags and configuration settings.
 

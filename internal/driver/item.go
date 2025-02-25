@@ -8,36 +8,41 @@ type Item struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"`
 	Default  string `json:"default"`
-	Values   string `json:"values"`
+	Options  string `json:"options"`
 	Required bool   `json:"required"`
 	Help     string `json:"help"`
 }
 
-type Items struct {
+type Info struct {
 	Common     []Item `json:"common"`
 	Additional []Item `json:"additional"`
+	Config     Config `json:"config"`
 }
 
-type IRootFolderPath interface {
-	GetRootFolderPath() string
+type IRootPath interface {
+	GetRootPath() string
 }
 
-type IRootFolderId interface {
-	GetRootFolderId() string
+type IRootId interface {
+	GetRootId() string
 }
 
-type RootFolderPath struct {
-	RootFolder string `json:"root_folder" required:"true" help:"root folder path"`
+type RootPath struct {
+	RootFolderPath string `json:"root_folder_path"`
 }
 
-type RootFolderId struct {
-	RootFolder string `json:"root_folder" required:"true" help:"root folder id"`
+type RootID struct {
+	RootFolderID string `json:"root_folder_id"`
 }
 
-func (r RootFolderPath) GetRootFolderPath() string {
-	return r.RootFolder
+func (r RootPath) GetRootPath() string {
+	return r.RootFolderPath
 }
 
-func (r RootFolderId) GetRootFolderId() string {
-	return r.RootFolder
+func (r *RootPath) SetRootPath(path string) {
+	r.RootFolderPath = path
+}
+
+func (r RootID) GetRootId() string {
+	return r.RootFolderID
 }

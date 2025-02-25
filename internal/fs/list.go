@@ -2,55 +2,51 @@ package fs
 
 import (
 	"context"
-	"regexp"
-	"strings"
 
 	"github.com/alist-org/alist/v3/internal/model"
-	"github.com/alist-org/alist/v3/internal/operations"
+	"github.com/alist-org/alist/v3/internal/op"
 	"github.com/alist-org/alist/v3/pkg/utils"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
 // List files
-func list(ctx context.Context, path string) ([]model.Obj, error) {
-	meta := ctx.Value("meta").(*model.Meta)
-	user := ctx.Value("user").(*model.User)
-	storage, actualPath, err := operations.GetStorageAndActualPath(path)
-	virtualFiles := operations.GetStorageVirtualFilesByPath(path)
-	if err != nil {
-		if len(virtualFiles) != 0 {
-			return virtualFiles, nil
-		}
+func list(ctx context.Context, path string, args *ListArgs) ([]model.Obj, error) {
+	meta, _ := ctx.Value("meta").(*model.Meta)
+	user, _ := ctx.Value("user").(*model.User)
+	virtualFiles := op.GetStorageVirtualFilesByPath(path)
+	storage, actualPath, err := op.GetStorageAndActualPath(path)
+	if err != nil && len(virtualFiles) == 0 {
 		return nil, errors.WithMessage(err, "failed get storage")
 	}
-	objs, err := operations.List(ctx, storage, actualPath)
-	if err != nil {
-		log.Errorf("%+v", err)
-		if len(virtualFiles) != 0 {
-			return virtualFiles, nil
+
+	var _objs []model.Obj
+	if storage != nil {
+		_objs, err = op.List(ctx, storage, actualPath, model.ListArgs{
+			ReqPath: path,
+			Refresh: args.Refresh,
+		})
+		if err != nil {
+			if !args.NoLog {
+				log.Errorf("fs/list: %+v", err)
+			}
+			if len(virtualFiles) == 0 {
+				return nil, errors.WithMessage(err, "failed get objs")
+			}
 		}
-		return nil, errors.WithMessage(err, "failed get objs")
 	}
-	for _, storageFile := range virtualFiles {
-		if !containsByName(objs, storageFile) {
-			objs = append(objs, storageFile)
-		}
-	}
+
+	om := model.NewObjMerge()
 	if whetherHide(user, meta, path) {
-		objs = hide(objs, meta)
+		om.InitHideReg(meta.Hide)
 	}
-	// sort objs
-	if storage.Config().LocalSort {
-		model.SortFiles(objs, storage.GetStorage().OrderBy, storage.GetStorage().OrderDirection)
-	}
-	model.ExtractFolder(objs, storage.GetStorage().ExtractFolder)
+	objs := om.Merge(_objs, virtualFiles...)
 	return objs, nil
 }
 
 func whetherHide(user *model.User, meta *model.Meta, path string) bool {
 	// if is admin, don't hide
-	if user.CanSeeHides() {
+	if user == nil || user.CanSeeHides() {
 		return false
 	}
 	// if meta is nil, don't hide
@@ -67,27 +63,4 @@ func whetherHide(user *model.User, meta *model.Meta, path string) bool {
 	}
 	// if is guest, hide
 	return true
-}
-
-func hide(objs []model.Obj, meta *model.Meta) []model.Obj {
-	var res []model.Obj
-	deleted := make([]bool, len(objs))
-	rs := strings.Split(meta.Hide, "\n")
-	for _, r := range rs {
-		re, _ := regexp.Compile(r)
-		for i, obj := range objs {
-			if deleted[i] {
-				continue
-			}
-			if re.MatchString(obj.GetName()) {
-				deleted[i] = true
-			}
-		}
-	}
-	for i, obj := range objs {
-		if !deleted[i] {
-			res = append(res, obj)
-		}
-	}
-	return res
 }

@@ -1,11 +1,14 @@
 package middlewares
 
 import (
-	stdpath "path"
+	"strings"
 
-	"github.com/alist-org/alist/v3/internal/db"
+	"github.com/alist-org/alist/v3/internal/conf"
+	"github.com/alist-org/alist/v3/internal/setting"
+
 	"github.com/alist-org/alist/v3/internal/errs"
 	"github.com/alist-org/alist/v3/internal/model"
+	"github.com/alist-org/alist/v3/internal/op"
 	"github.com/alist-org/alist/v3/internal/sign"
 	"github.com/alist-org/alist/v3/pkg/utils"
 	"github.com/alist-org/alist/v3/server/common"
@@ -16,8 +19,7 @@ import (
 func Down(c *gin.Context) {
 	rawPath := parsePath(c.Param("path"))
 	c.Set("path", rawPath)
-	filename := stdpath.Base(rawPath)
-	meta, err := db.GetNearestMeta(rawPath)
+	meta, err := op.GetNearestMeta(rawPath)
 	if err != nil {
 		if !errors.Is(errors.Cause(err), errs.MetaNotFound) {
 			common.ErrorResp(c, err, 500, true)
@@ -27,8 +29,8 @@ func Down(c *gin.Context) {
 	c.Set("meta", meta)
 	// verify sign
 	if needSign(meta, rawPath) {
-		s := c.Param("sign")
-		err = sign.Verify(filename, s)
+		s := c.Query("sign")
+		err = sign.Verify(rawPath, strings.TrimSuffix(s, "/"))
 		if err != nil {
 			common.ErrorResp(c, err, 401)
 			c.Abort()
@@ -41,10 +43,16 @@ func Down(c *gin.Context) {
 // TODO: implement
 // path maybe contains # ? etc.
 func parsePath(path string) string {
-	return utils.StandardizePath(path)
+	return utils.FixAndCleanPath(path)
 }
 
 func needSign(meta *model.Meta, path string) bool {
+	if setting.GetBool(conf.SignAll) {
+		return true
+	}
+	if common.IsStorageSignEnabled(path) {
+		return true
+	}
 	if meta == nil || meta.Password == "" {
 		return false
 	}

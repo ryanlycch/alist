@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Xhofe/go-cache"
-	"github.com/alist-org/alist/v3/internal/db"
 	"github.com/alist-org/alist/v3/internal/model"
+	"github.com/alist-org/alist/v3/internal/op"
 	"github.com/alist-org/alist/v3/server/common"
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp/totp"
@@ -26,7 +26,28 @@ type LoginReq struct {
 	OtpCode  string `json:"otp_code"`
 }
 
+// Login Deprecated
 func Login(c *gin.Context) {
+	var req LoginReq
+	if err := c.ShouldBind(&req); err != nil {
+		common.ErrorResp(c, err, 400)
+		return
+	}
+	req.Password = model.StaticHash(req.Password)
+	loginHash(c, &req)
+}
+
+// LoginHash login with password hashed by sha256
+func LoginHash(c *gin.Context) {
+	var req LoginReq
+	if err := c.ShouldBind(&req); err != nil {
+		common.ErrorResp(c, err, 400)
+		return
+	}
+	loginHash(c, &req)
+}
+
+func loginHash(c *gin.Context, req *LoginReq) {
 	// check count of login
 	ip := c.ClientIP()
 	count, ok := loginCache.Get(ip)
@@ -36,19 +57,14 @@ func Login(c *gin.Context) {
 		return
 	}
 	// check username
-	var req LoginReq
-	if err := c.ShouldBind(&req); err != nil {
-		common.ErrorResp(c, err, 400)
-		return
-	}
-	user, err := db.GetUserByName(req.Username)
+	user, err := op.GetUserByName(req.Username)
 	if err != nil {
 		common.ErrorResp(c, err, 400)
 		loginCache.Set(ip, count+1)
 		return
 	}
-	// validate password
-	if err := user.ValidatePassword(req.Password); err != nil {
+	// validate password hash
+	if err := user.ValidatePwdStaticHash(req.Password); err != nil {
 		common.ErrorResp(c, err, 400)
 		loginCache.Set(ip, count+1)
 		return
@@ -62,7 +78,7 @@ func Login(c *gin.Context) {
 		}
 	}
 	// generate token
-	token, err := common.GenerateToken(user.Username)
+	token, err := common.GenerateToken(user)
 	if err != nil {
 		common.ErrorResp(c, err, 400, true)
 		return
@@ -91,7 +107,7 @@ func CurrentUser(c *gin.Context) {
 }
 
 func UpdateCurrent(c *gin.Context) {
-	var req LoginReq
+	var req model.User
 	if err := c.ShouldBind(&req); err != nil {
 		common.ErrorResp(c, err, 400)
 		return
@@ -99,9 +115,10 @@ func UpdateCurrent(c *gin.Context) {
 	user := c.MustGet("user").(*model.User)
 	user.Username = req.Username
 	if req.Password != "" {
-		user.Password = req.Password
+		user.SetPassword(req.Password)
 	}
-	if err := db.UpdateUser(user); err != nil {
+	user.SsoID = req.SsoID
+	if err := op.UpdateUser(user); err != nil {
 		common.ErrorResp(c, err, 500)
 	} else {
 		common.SuccessResp(c)
@@ -130,9 +147,9 @@ func Generate2FA(c *gin.Context) {
 	// to base64
 	var buf bytes.Buffer
 	png.Encode(&buf, img)
-	base64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	common.SuccessResp(c, gin.H{
-		"qr":     "data:image/png;base64," + base64,
+		"qr":     "data:image/png;base64," + b64,
 		"secret": key.Secret(),
 	})
 }
@@ -158,7 +175,16 @@ func Verify2FA(c *gin.Context) {
 		return
 	}
 	user.OtpSecret = req.Secret
-	if err := db.UpdateUser(user); err != nil {
+	if err := op.UpdateUser(user); err != nil {
+		common.ErrorResp(c, err, 500)
+	} else {
+		common.SuccessResp(c)
+	}
+}
+
+func LogOut(c *gin.Context) {
+	err := common.InvalidateToken(c.GetHeader("Authorization"))
+	if err != nil {
 		common.ErrorResp(c, err, 500)
 	} else {
 		common.SuccessResp(c)
